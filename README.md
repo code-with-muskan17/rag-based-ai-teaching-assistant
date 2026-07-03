@@ -1,6 +1,6 @@
 # 🎓 RAG-Based AI Teaching Assistant
 
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://code-with-muskan17-rag-based-ai-teaching-assistant-app-vlwkf.streamlit.app)
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://code-with-muskan17-rag-based-ai-teaching-assistant-app-pqyq11.streamlit.app)
 
 An AI-powered assistant that answers questions about course video lectures — telling you exactly which video covers a topic and at what timestamp.
 
