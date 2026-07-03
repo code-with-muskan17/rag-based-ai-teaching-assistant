@@ -3,7 +3,8 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 st.set_page_config(
     page_title="AI Teaching Assistant",
@@ -11,7 +12,36 @@ st.set_page_config(
     layout="wide"
 )
 
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+st.markdown("""
+<style>
+    h1 a, h2 a, h3 a, h4 a { display: none !important; }
+
+    div.stButton > button[kind="primary"] {
+        background: #2d6a4f;
+        border: none;
+        color: white;
+        font-weight: 600;
+        font-size: 16px;
+        border-radius: 8px;
+        padding: 14px;
+    }
+    div.stButton > button[kind="primary"]:hover {
+        background: #1a472a;
+        border: none;
+    }
+
+    [data-testid="stMetricLabel"] {
+        font-size: 12px !important;
+        color: #888 !important;
+    }
+    [data-testid="stMetricValue"] {
+        font-size: 28px !important;
+        color: white !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
 
 @st.cache_resource
@@ -22,17 +52,19 @@ df = load_embeddings()
 
 
 def get_query_embedding(text):
-    result = genai.embed_content(
-        model="models/embedding-001",
-        content=text,
-        task_type="retrieval_query"
+    result = client.models.embed_content(
+        model="gemini-embedding-001",
+        contents=text,
+        config=types.EmbedContentConfig(task_type="RETRIEVAL_QUERY")
     )
-    return result["embedding"]
+    return result.embeddings[0].values
 
 
 def generate_answer(prompt):
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    response = model.generate_content(prompt)
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt
+    )
     return response.text
 
 
@@ -67,9 +99,66 @@ you can only help with questions related to this course.
     return answer, relevant_chunks
 
 
+# ── Sidebar ──
+with st.sidebar:
+    st.markdown("""
+    <p style="color: #4CAF50; font-size: 11px; letter-spacing: 1.5px;
+              margin: 0 0 16px 0; font-weight: 600;">
+        POWERED BY GEMINI AI + RAG
+    </p>
+
+    <p style="color: #aaa; font-size: 13px; line-height: 1.8; margin: 0 0 20px 0;">
+        Instead of scrubbing through hours of video to find a topic —
+        just ask a question and get pointed to the exact video and timestamp.
+    </p>
+    """, unsafe_allow_html=True)
+
+    st.divider()
+
+    st.markdown("""
+    <div style="background: #1a1a2e; border-radius: 10px; padding: 16px;
+                border: 1px solid #2a2a3d; margin-bottom: 20px;">
+        <p style="color: #666; font-size: 11px; letter-spacing: 1.5px;
+                  font-weight: 600; margin: 0 0 14px 0;">HOW IT WORKS</p>
+        <div style="display:flex; align-items:flex-start; margin-bottom:12px;">
+            <span style="color:#4CAF50; font-size:14px; margin-right:10px; line-height:1.4;">①</span>
+            <p style="color:#bbb; font-size:13px; margin:0; line-height:1.5;">
+                Question converted to a vector embedding</p>
+        </div>
+        <div style="display:flex; align-items:flex-start; margin-bottom:12px;">
+            <span style="color:#4CAF50; font-size:14px; margin-right:10px; line-height:1.4;">②</span>
+            <p style="color:#bbb; font-size:13px; margin:0; line-height:1.5;">
+                Compared against all transcript chunks</p>
+        </div>
+        <div style="display:flex; align-items:flex-start; margin-bottom:12px;">
+            <span style="color:#4CAF50; font-size:14px; margin-right:10px; line-height:1.4;">③</span>
+            <p style="color:#bbb; font-size:13px; margin:0; line-height:1.5;">
+                Top 5 relevant chunks retrieved</p>
+        </div>
+        <div style="display:flex; align-items:flex-start;">
+            <span style="color:#4CAF50; font-size:14px; margin-right:10px; line-height:1.4;">④</span>
+            <p style="color:#bbb; font-size:13px; margin:0; line-height:1.5;">
+                Gemini generates a human-friendly answer</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <p style="color: #666; font-size: 11px; letter-spacing: 1.5px;
+              font-weight: 600; margin: 0 0 12px 0;">COURSE INFO</p>
+    """, unsafe_allow_html=True)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Video Chunks", len(df))
+    with col2:
+        st.metric("Videos", 3)
+
+
+# ── Main Area ──
 st.markdown("# 🎓 AI Teaching Assistant")
 st.markdown("Ask anything about the course — I'll point you to the right video and timestamp.")
-st.markdown("---")
+st.divider()
 
 col_left, col_right = st.columns([1, 1], gap="large")
 
@@ -78,25 +167,31 @@ with col_left:
 
     examples = [
         "Where is media taught in this course?",
-        "Which video covers HTML tables?",
-        "Where can I learn CSS selectors?",
-        "Which video explains JavaScript arrays?",
-        "Where is flexbox taught?",
+        "Which video covers HTML video tags?",
+        "Where is SEO taught?",
+        "What is covered in the SEO video?",
+        "Where are audio tags explained?",
+        "What does video 10 cover?",
+        "Where is Core Web Vitals explained?",
     ]
 
     selected_example = st.selectbox(
-        "Or pick an example question:",
-        [""] + examples
+        "Pick an example or type your own:",
+        ["— select an example —"] + examples
     )
+
+    if selected_example == "— select an example —":
+        selected_example = ""
 
     question = st.text_area(
-        "Type your question:",
+        "Your question:",
         value=selected_example,
-        placeholder="e.g. Where is CSS Flexbox taught?",
-        height=120
+        placeholder="e.g. Where is SEO taught in this course?",
+        height=130,
+        label_visibility="collapsed"
     )
 
-    submitted = st.button("🔍 Find Answer", type="primary", use_container_width=True)
+    submitted = st.button("Find Answer", type="primary", use_container_width=True)
 
 
 with col_right:
@@ -110,13 +205,13 @@ with col_right:
                 st.markdown(
                     f"""
                     <div style="
-                        background: linear-gradient(135deg, #1a1a2e, #16213e);
-                        border-left: 4px solid #4CAF50;
-                        border-radius: 8px;
-                        padding: 20px;
-                        margin-bottom: 20px;
+                        border-left: 4px solid #2d6a4f;
+                        background: #1a1a2e;
+                        border-radius: 0 8px 8px 0;
+                        padding: 20px 24px;
+                        margin-bottom: 24px;
                     ">
-                        <p style="color: #e0e0e0; font-size: 16px; line-height: 1.8; margin: 0;">
+                        <p style="color: #e0e0e0; font-size: 15px; line-height: 1.9; margin: 0;">
                             {answer}
                         </p>
                     </div>
@@ -140,43 +235,18 @@ with col_right:
         st.markdown(
             """
             <div style="
-                background: #1e1e2e;
-                border: 2px dashed #444;
-                border-radius: 12px;
-                padding: 40px;
+                border: 2px dashed #2a2a3d;
+                border-radius: 10px;
+                padding: 50px 32px;
                 text-align: center;
+                margin-top: 4px;
             ">
-                <p style="color: #888; font-size: 18px; margin: 0;">
-                    👈 Type your question and click <strong>Find Answer</strong>
+                <p style="color: #444; font-size: 32px; margin: 0 0 12px 0;">🔍</p>
+                <p style="color: #666; font-size: 15px; margin: 0; line-height: 1.7;">
+                    Pick an example or type your question<br>
+                    then click <strong style="color: #4CAF50;">Find Answer</strong>
                 </p>
             </div>
             """,
             unsafe_allow_html=True
         )
-
-
-with st.sidebar:
-    st.markdown("## 🎓 About")
-    st.markdown("""
-    This AI Teaching Assistant helps you navigate
-    a web development course using RAG.
-
-    Ask any topic and it will tell you:
-    - 📹 Which video covers it
-    - ⏱️ Exact timestamp to jump to
-    - 📝 What's taught at that point
-    """)
-
-    st.markdown("---")
-    st.markdown("### ⚙️ How It Works")
-    st.markdown("""
-    1. Your question is converted to a vector embedding
-    2. Compared against all video transcript chunks
-    3. Top 5 most relevant chunks are retrieved
-    4. Gemini generates a human-friendly answer
-    """)
-
-    st.markdown("---")
-    st.markdown("### 📊 Course Info")
-    st.metric("Total Video Chunks", len(df))
-    st.caption("Powered by Gemini AI + RAG Pipeline")
